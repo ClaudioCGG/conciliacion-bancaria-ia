@@ -1,0 +1,9 @@
+pandas>=2.2
+numpy>=1.26
+openpyxl>=3.1
+rapidfuzz>=3.6
+duckdb>=1.0
+matplotlib>=3.8
+pytest>=8.0
+# Opcional, solo para la etapa de nombres con IA:
+# google-genai>=1.0
