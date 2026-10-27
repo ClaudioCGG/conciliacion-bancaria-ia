@@ -26,7 +26,7 @@ def grafico_cascada(movimientos: pd.DataFrame, ruta: str | Path | None = None):
 
     etiquetas = [n.split(" · ")[1] for n in por_nivel.index] + ["Pendientes\n(revisión humana)"]
     etiquetas = [e.replace(" (IA)", "\n(IA)").replace(" por fecha", "\npor fecha")
-                 .replace("Cuenta contable", "Por cuenta\ncontable").replace("Diferencia aislada", "Diferencia\naislada")
+                 .replace("Cuenta contable", "Por cuenta\ncontable").replace("Compensación interna", "Compensación\ninterna").replace("Diferencia aislada", "Diferencia\naislada")
                  for e in etiquetas]
     aportes = [v / total * 100 for v in por_nivel] + [pendientes / total * 100]
 

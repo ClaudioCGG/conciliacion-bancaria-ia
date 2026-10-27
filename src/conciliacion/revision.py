@@ -73,3 +73,29 @@ def clasificar_pendientes(movs: pd.DataFrame) -> pd.DataFrame:
         pend.at[idx, "sugerencia"] = s
 
     return pend
+
+
+def control_de_matches(movs: pd.DataFrame, tolerancia: float = 0.01) -> pd.DataFrame:
+    """Tabla de control: una fila por match, con el Debe y el Haber de cada
+    origen. Todo match tiene que cerrar en cero:
+
+        (Banco Debe - Banco Haber) - (Contabilidad Debe - Contabilidad Haber) = 0
+
+    Debe = ingreso a la cuenta bancaria, Haber = egreso. Un match de
+    compensación interna (nivel 0) cierra dentro del mismo origen: su Debe
+    se cancela con su Haber. Si alguna fila no cierra, hay un error que
+    revisar antes de dar la conciliación por buena."""
+    conc = movs[movs["conciliado"]]
+    if conc.empty:
+        return pd.DataFrame()
+    piv = conc.pivot_table(index=["cuenta", "match", "nivel"], columns="origen",
+                           values=["ingreso", "egreso"], aggfunc="sum", fill_value=0.0)
+    tabla = pd.DataFrame(index=piv.index)
+    for origen in ("Banco", "Contabilidad"):
+        tabla[f"{origen} Debe"] = piv[("ingreso", origen)] if ("ingreso", origen) in piv else 0.0
+        tabla[f"{origen} Haber"] = piv[("egreso", origen)] if ("egreso", origen) in piv else 0.0
+    tabla["Filas"] = conc.groupby(["cuenta", "match", "nivel"]).size()
+    tabla["Diferencia"] = ((tabla["Banco Debe"] - tabla["Banco Haber"])
+                           - (tabla["Contabilidad Debe"] - tabla["Contabilidad Haber"])).round(2)
+    tabla["Cierra"] = tabla["Diferencia"].abs() <= tolerancia
+    return tabla.reset_index().rename(columns={"cuenta": "Banco", "match": "Match", "nivel": "Nivel"})

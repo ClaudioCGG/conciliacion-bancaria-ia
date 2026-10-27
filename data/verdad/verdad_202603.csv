@@ -638,3 +638,9 @@ A4725,mayor,True,E6 cobro duplicado en mayor (el original sí debería conciliar
 A4726,mayor,False,E6 asiento duplicado
 B810412,banco,False,E7 gasto bancario no incluido en el asiento mensual
 B810413,banco,False,E7 gasto bancario no incluido en el asiento mensual
+B810414,banco,True,C1 duplicado corregido en el mes
+A4727,mayor,True,C1 duplicado corregido en el mes
+A4728,mayor,True,C1 duplicado corregido en el mes
+A4729,mayor,True,C1 duplicado corregido en el mes
+B810415,banco,True,C2 débito y reverso en el mes
+B810416,banco,True,C2 débito y reverso en el mes

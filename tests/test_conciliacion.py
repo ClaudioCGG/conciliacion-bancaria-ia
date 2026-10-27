@@ -95,3 +95,33 @@ def test_pipeline_sin_falsos_positivos_y_detecta_todas_las_excepciones():
     assert m["excepciones_detectadas"] == m["excepciones"]
     assert m["tasa_automatica"] >= 0.95
     assert pendientes["sugerencia"].str.len().gt(0).all()
+
+
+# --- Nivel 0 y control de matches -------------------------------------
+def test_duplicado_corregido_en_el_mes_se_compensa():
+    banco = pd.DataFrame([_mov("Banco", "2026-03-10", "TRANSF ENVIADA A ACME SA", -500.0, "b1")])
+    mayor = pd.DataFrame([
+        _mov("Contabilidad", "2026-03-10", "Pago OP 0001-000001 Acme SA", -500.0, "m1"),
+        _mov("Contabilidad", "2026-03-11", "Pago OP 0001-000001 Acme SA", -500.0, "m2"),
+        _mov("Contabilidad", "2026-03-15", "Anulación asiento duplicado Pago OP 0001-000001 Acme SA", 500.0, "m3"),
+    ])
+    r = MotorConciliacion().conciliar(banco, mayor, "Test")
+    assert r.conciliados == 4
+    niveles = r.movimientos.set_index("ref")["nivel"]
+    assert niveles["m2"] == niveles["m3"] == "0 · Compensación interna"
+
+
+def test_duplicado_sin_corregir_queda_pendiente():
+    banco = pd.DataFrame([_mov("Banco", "2026-03-10", "TRANSF ENVIADA A ACME SA", -500.0, "b1")])
+    mayor = pd.DataFrame([_mov("Contabilidad", "2026-03-10", "Pago OP 0001-000001 Acme SA", -500.0, "m1"),
+                          _mov("Contabilidad", "2026-03-11", "Pago OP 0001-000001 Acme SA", -500.0, "m2")])
+    r = MotorConciliacion().conciliar(banco, mayor, "Test")
+    assert r.conciliados == 0
+
+
+def test_todos_los_matches_cierran_en_cero():
+    from conciliacion.revision import control_de_matches
+    resultados, _, _ = conciliar_periodo(DATOS, "202603", usar_ia=False, verbose=False)
+    control = control_de_matches(pd.concat([r.movimientos for r in resultados], ignore_index=True))
+    assert len(control) > 0
+    assert control["Cierra"].all()

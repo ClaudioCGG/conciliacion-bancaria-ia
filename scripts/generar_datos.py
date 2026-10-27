@@ -325,6 +325,32 @@ banco(movs_alfa, DIAS[-1], "IVA 21% S/COMISION", -3_885.00,
       debe=False, motivo="E7 gasto bancario no incluido en el asiento mensual")
 EXCEPCIONES.append("E7: comisión de mantenimiento fuera del asiento mensual de gastos")
 
+# ----------------------------------------------------------------------
+# CORRECCIONES DENTRO DEL MES: errores que ya fueron corregidos y que el
+# motor SÍ debe conciliar (compensándolos entre sí).
+# ----------------------------------------------------------------------
+# C1. Pago registrado dos veces y anulado con un contra-asiento en el mes.
+prov = "SEGUROS PROTECCION SA"
+f = DIAS[12]
+m = 287_640.00
+nro_op += 1
+banco(movs_alfa, f, f"TRANSF ENVIADA A {prov} CUIT {_cuit('30')}", -m,
+      motivo="C1 duplicado corregido en el mes")
+asiento(CTA_ALFA, f, f"Pago OP 0001-{nro_op:06d} {_apellido_contable(prov)}", -m,
+        motivo="C1 duplicado corregido en el mes")
+asiento(CTA_ALFA, f + timedelta(days=1), f"Pago OP 0001-{nro_op:06d} {_apellido_contable(prov)}", -m,
+        motivo="C1 duplicado corregido en el mes")
+asiento(CTA_ALFA, f + timedelta(days=6), f"Anulación asiento duplicado Pago OP 0001-{nro_op:06d} "
+        f"{_apellido_contable(prov)}", m, motivo="C1 duplicado corregido en el mes", usuario="mgarcia")
+
+# C2. Débito directo rechazado: el banco lo debita y lo revierte en el mes.
+f = DIAS[16]
+m = 96_420.50
+banco(movs_alfa, f, "DEBITO DIRECTO ENERGIA URBANA SA CLIENTE 778812", -m,
+      motivo="C2 débito y reverso en el mes")
+banco(movs_alfa, f + timedelta(days=2), "REVERSO DEBITO DIRECTO ENERGIA URBANA SA CLIENTE 778812", m,
+      motivo="C2 débito y reverso en el mes")
+
 
 # ----------------------------------------------------------------------
 # Exportación con el "desorden" típico de cada banco

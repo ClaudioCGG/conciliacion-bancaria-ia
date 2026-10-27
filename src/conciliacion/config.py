@@ -8,6 +8,11 @@ MAX_FILAS_DIFERENCIA = 2         # máximo de filas para aislar una diferencia (
 
 SIN_CATEGORIA = "Sin Categoría"
 
+# Nivel 0: palabras que identifican una anulación o reverso, y similitud
+# mínima (0-100) entre su concepto y el del movimiento original.
+PATRON_ANULACION = r"\b(?:anulaci[oó]n|anula|reverso|contra-?asiento|extorno)\b(?:\s+asiento)?(?:\s+duplicado)?"
+SIMILITUD_ANULACION = 90
+
 # Reglas de categorización: palabra clave -> cuenta contable.
 # Se aplican de la más larga a la más corta, así una clave específica
 # ("comision mantenimiento") gana sobre una genérica ("qr").

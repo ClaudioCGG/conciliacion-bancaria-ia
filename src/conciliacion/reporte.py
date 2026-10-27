@@ -13,6 +13,7 @@ AZUL = "1F4E78"
 GRIS_TEXTO = "8C8C8C"
 FONDO_CONCILIADO = "EDEDED"
 FONDO_PENDIENTE = "FFF2CC"
+ROJO_ALERTA = "F8CBAD"
 MONEDA = '#,##0.00;[Red]-#,##0.00'
 FECHA = "DD/MM/YYYY"
 
@@ -71,7 +72,8 @@ def _formatear(ws, columnas_moneda=(), columnas_fecha=(), anchos=None):
                 celda.number_format = fmt
 
 
-def exportar_excel(resultados, pendientes: pd.DataFrame, ruta: str | Path) -> Path:
+def exportar_excel(resultados, pendientes: pd.DataFrame, ruta: str | Path,
+                   control: pd.DataFrame | None = None) -> Path:
     ruta = Path(ruta)
     ruta.parent.mkdir(parents=True, exist_ok=True)
 
@@ -85,6 +87,8 @@ def exportar_excel(resultados, pendientes: pd.DataFrame, ruta: str | Path) -> Pa
     with pd.ExcelWriter(ruta, engine="openpyxl") as xw:
         resumen.to_excel(xw, sheet_name="Resumen", index=False)
         hoja_pend.to_excel(xw, sheet_name="Pendientes", index=False)
+        if control is not None and not control.empty:
+            control.to_excel(xw, sheet_name="Control de matches", index=False)
         _por_cuenta_contable(resultados).to_excel(xw, sheet_name="Por cuenta contable", index=False)
         for r in resultados:
             det = (r.movimientos.sort_values(["origen", "fecha"])[list(COLUMNAS_DETALLE)]
@@ -104,6 +108,16 @@ def exportar_excel(resultados, pendientes: pd.DataFrame, ruta: str | Path) -> Pa
     _formatear(wb["Por cuenta contable"], anchos={"Cuenta contable": 32},
                columnas_moneda={"Ingreso Banco", "Ingreso Contabilidad", "Dif. ingreso",
                                 "Egreso Banco", "Egreso Contabilidad", "Dif. egreso"})
+    if "Control de matches" in wb.sheetnames:
+        ws = wb["Control de matches"]
+        _formatear(ws, anchos={"Nivel": 26},
+                   columnas_moneda={"Banco Debe", "Banco Haber", "Contabilidad Debe", "Contabilidad Haber", "Diferencia"})
+        col_cierra = [c.value for c in ws[1]].index("Cierra")
+        for fila in ws.iter_rows(min_row=2):
+            if not fila[col_cierra].value:
+                for celda in fila:
+                    celda.fill = PatternFill("solid", fgColor=ROJO_ALERTA)
+                    celda.font = Font(bold=True)
     for r in resultados:
         ws = wb[r.cuenta[:31]]
         _formatear(ws, columnas_moneda={"Ingreso", "Egreso"}, columnas_fecha={"Fecha", "Fecha registro"},

@@ -25,13 +25,15 @@ flowchart LR
     B[Extracto Banco Beta<br/>importe con signo] --> N
     M[Libro mayor] --> C
     N --> C{Motor en cascada}
+    C -->|0| C0[Compensaciones internas]
     C -->|1| C1[Por cuenta contable]
     C -->|2| C2[Uno a uno por importe]
     C -->|3| C3[Agrupado por fecha]
     C -->|4| C4[Por nombre con IA]
     C -->|5| C5[Aislamiento de diferencias]
     C --> P[Pendientes<br/>+ sugerencias]
-    C1 & C2 & C3 & C4 & C5 & P --> X[Informe Excel<br/>+ controles SQL]
+    C0 & C1 & C2 & C3 & C4 & C5 --> K[Control de matches<br/>cada match = 0]
+    K & P --> X[Informe Excel<br/>+ controles SQL]
 ```
 
 **1. Normalización.** Cada formato de banco se lleva a un esquema único (`fecha, concepto, ingreso, egreso, saldo`). Se verifica fila por fila que `saldo anterior + ingreso − egreso = saldo`, para garantizar que no se perdió ni se duplicó ningún movimiento al leer el PDF.
@@ -40,13 +42,22 @@ flowchart LR
 
 | Nivel | Qué hace | Ejemplo |
 |---|---|---|
+| 0 · Compensación interna | Un contra-asiento o un reverso bancario se compensa con su original **dentro del mismo origen**, si la corrección se hizo en el mes. Si no, la diferencia queda a la vista | Pago cargado dos veces y anulado; débito directo rechazado y revertido por el banco |
 | 1 · Por cuenta contable | Si el total de una cuenta cierra entre banco y mayor (ingresos y egresos **siempre por separado**, para que un error no compense a otro), se concilia entera | 22 acreditaciones QR contra 1 asiento mensual |
 | 2 · Uno a uno | Un movimiento contra un asiento del mismo importe, **solo si el match es único** | Pago a un proveedor |
 | 3 · Agrupado por fecha | Varias filas de un lado contra una del otro, dentro de ±1 día | 5 transferencias de sueldos contra 1 asiento de haberes |
 | 4 · Por nombre (IA) | Extrae el nombre de la contraparte del texto libre (Gemini) y concilia por totales de cada cliente o proveedor | Dos clientes que pagaron el mismo importe; una factura pagada en dos transferencias |
 | 5 · Aislamiento de diferencias | Si una cuenta no cierra por 1 o 2 movimientos exactos, concilia el resto y deja esos a la vista | Una comisión que quedó fuera del asiento mensual de gastos |
 
-**3. Revisión guiada.** Lo que ningún nivel resuelve queda pendiente, con una hipótesis:
+**3. Control de matches.** Cada match tiene que cerrar en cero:
+
+```
+(Banco Debe − Banco Haber) − (Contabilidad Debe − Contabilidad Haber) = 0
+```
+
+El informe incluye una hoja con una fila por match y sus cuatro columnas (Debe y Haber de banco y de contabilidad). Las compensaciones internas cierran dentro de un mismo origen: su Debe se cancela con su Haber. Si algún match no da cero, la fila se marca en rojo y la conciliación no se da por buena. Es la red de seguridad del propio motor: en las pruebas, alterar un solo importe en $1.000 hace saltar la alerta en ese match.
+
+**4. Revisión guiada.** Lo que ningún nivel resuelve queda pendiente, con una hipótesis:
 
 | Pendiente | Sugerencia del motor |
 |---|---|
@@ -59,14 +70,16 @@ El criterio de diseño es **no forzar nunca un match dudoso**: un pendiente de m
 
 ## Resultados (datos sintéticos)
 
-El generador siembra **7 excepciones reales** (ingresos sin registrar, cheque en tránsito, error de tipeo, asiento duplicado, etc.) y guarda la respuesta correcta de cada movimiento. Así el motor se mide de forma objetiva:
+El generador siembra **7 excepciones reales** y **2 errores ya corregidos en el mes** (ingresos sin registrar, cheque en tránsito, error de tipeo, asiento duplicado, etc.) y guarda la respuesta correcta de cada movimiento. Así el motor se mide de forma objetiva:
 
 | Métrica | Resultado |
 |---|---|
-| Movimientos procesados (2 bancos + mayor) | 639 |
+| Movimientos procesados (2 bancos + mayor) | 645 |
 | Conciliados automáticamente | **98,3%** |
 | Precisión (lo conciliado estaba bien) | **100%**, 0 falsos positivos |
 | Excepciones sembradas detectadas | **7 de 7** |
+| Errores corregidos en el mes que concilió (duplicado anulado, débito revertido) | **2 de 2** |
+| Matches que cierran en cero | **224 de 224** |
 | Tiempo de ejecución | ~3 segundos |
 
 En datos reales la tasa automática es menor (90–95%) porque los textos son más desordenados. Por eso la precisión, no la tasa, es la métrica que se protege.
@@ -81,7 +94,7 @@ pip install -r requirements.txt
 python scripts/generar_datos.py      # genera el mes de ejemplo
 python conciliar.py                  # concilia y deja el informe en ejemplos/
 python scripts/controles_sql.py      # controles de gestión en SQL (DuckDB)
-python -m pytest                     # 16 tests, incluida la medición contra la verdad
+python -m pytest                     # 19 tests, incluida la medición contra la verdad
 ```
 
 O abrí [`notebooks/demo_conciliacion.ipynb`](notebooks/demo_conciliacion.ipynb) directo en Google Colab.
@@ -94,6 +107,7 @@ O abrí [`notebooks/demo_conciliacion.ipynb`](notebooks/demo_conciliacion.ipynb)
 
 - **Resumen:** movimientos, % automático y aporte de cada nivel por banco.
 - **Pendientes:** solo lo que requiere acción, con tipo y sugerencia.
+- **Control de matches:** cada match con su Debe y Haber por origen; la diferencia tiene que dar cero.
 - **Por cuenta contable:** totales banco vs. mayor y diferencias.
 - **Detalle por banco:** cada movimiento con su nivel, número de match y días de diferencia; lo conciliado en gris, para que lo pendiente salte a la vista.
 
@@ -107,9 +121,9 @@ O abrí [`notebooks/demo_conciliacion.ipynb`](notebooks/demo_conciliacion.ipynb)
 src/conciliacion/
   normalizador.py       extractos de cada banco -> esquema único + control de saldos
   categorias.py         concepto -> cuenta contable (reglas editables)
-  motor.py              conciliación en 5 niveles
+  motor.py              conciliación en cascada (niveles 0 a 5)
   extractor_nombres.py  nombre de la contraparte: Gemini o reglas + unificación difusa
-  revision.py           clasificación de pendientes y sugerencias
+  revision.py           pendientes con sugerencias + control de matches
   reporte.py            informe Excel con formato
   metricas.py           precisión, cobertura y detección de excepciones
 scripts/                generador de datos sintéticos y controles SQL

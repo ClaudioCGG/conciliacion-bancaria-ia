@@ -12,7 +12,7 @@ from .extractor_nombres import crear_extractor
 from .motor import MotorConciliacion
 from .normalizador import NORMALIZADORES, control_de_saldos, leer_mayor
 from .reporte import exportar_excel
-from .revision import clasificar_pendientes
+from .revision import clasificar_pendientes, control_de_matches
 
 ARCHIVOS = {
     "Banco Alfa": "banco_alfa_{periodo}.xlsx",
@@ -40,10 +40,15 @@ def conciliar_periodo(dir_datos: str | Path, periodo: str, salida: str | Path | 
         log(f"{banco}: {r.conciliados}/{r.total} movimientos conciliados ({r.tasa:.1%}), "
             f"{r.total - r.conciliados} pendientes")
 
-    pendientes = clasificar_pendientes(pd.concat([r.movimientos for r in resultados], ignore_index=True))
+    todos = pd.concat([r.movimientos for r in resultados], ignore_index=True)
+    pendientes = clasificar_pendientes(todos)
+    control = control_de_matches(todos)
+    no_cierran = int((~control["Cierra"]).sum())
+    log(f"Control de matches: {len(control)} matches, "
+        + ("todos cierran en cero" if no_cierran == 0 else f"ATENCIÓN: {no_cierran} no cierran en cero"))
     segundos = time.perf_counter() - inicio
     if salida:
-        ruta = exportar_excel(resultados, pendientes, salida)
+        ruta = exportar_excel(resultados, pendientes, salida, control=control)
         log(f"Informe: {ruta}")
     log(f"Tiempo total: {segundos:.1f} s")
     return resultados, pendientes, segundos

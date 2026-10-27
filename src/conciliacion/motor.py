@@ -1,6 +1,8 @@
 """
 Motor de conciliación en cascada: de lo más seguro a lo más arriesgado.
 
+    Nivel 0  Compensación interna      Un contra-asiento o un reverso bancario se compensa con su
+                                       original dentro del mismo origen (errores corregidos en el mes).
     Nivel 1  Por cuenta contable       Si el total de una cuenta cierra entre banco y mayor
                                        (ingresos y egresos SIEMPRE por separado), se concilia entera.
     Nivel 2  Uno a uno por importe     Un movimiento contra un asiento con el mismo importe,
@@ -19,15 +21,17 @@ pendiente de más a un error escondido.
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 from itertools import combinations
 
 import numpy as np
 import pandas as pd
+from rapidfuzz import fuzz
 
 from . import config as cfg
 from .categorias import categorizar
-from .extractor_nombres import SIN_NOMBRE, ExtractorReglas, canonicalizar
+from .extractor_nombres import SIN_NOMBRE, ExtractorReglas, canonicalizar, normalizar_texto
 
 EPS = 1e-6
 
@@ -88,6 +92,34 @@ class MotorConciliacion:
         tardio = pd.notna(dias) and dias > cfg.DIAS_REGISTRO_TARDIO
         df.loc[idx, ["conciliado", "nivel", "match", "dias_diferencia"]] = [True, nivel, m, dias]
         df.loc[idx, "estado"] = "Conciliado - registro tardío" if tardio else "Conciliado"
+
+    # ------------------------------------------------------------------
+    # Nivel 0: compensaciones internas (contra-asientos y reversos)
+    # ------------------------------------------------------------------
+    def nivel_0_compensaciones(self, df) -> int:
+        """Dentro de un mismo origen, un movimiento marcado como anulación o
+        reverso se compensa con su original (mismo importe, signo opuesto,
+        mismo concepto). Ej.: un pago cargado dos veces y anulado con un
+        contra-asiento en el mes, o un débito directo rechazado por el banco.
+        Si la corrección no se hizo en el período, no hay par y la diferencia
+        queda a la vista."""
+        n = 0
+        anulaciones = df[~df["conciliado"] & df["concepto"].str.contains(cfg.PATRON_ANULACION, case=False, regex=True)]
+        for ia, fa in anulaciones.iterrows():
+            if df.at[ia, "conciliado"]:
+                continue
+            texto_base = normalizar_texto(re.sub(cfg.PATRON_ANULACION, " ", fa["concepto"], flags=re.I))
+            cand = df[~df["conciliado"] & (df["origen"] == fa["origen"]) & (df.index != ia)
+                      & ((df["neto"] + fa["neto"]).abs() <= self.tol)]
+            cand = cand[cand["concepto"].map(
+                lambda c: fuzz.token_set_ratio(normalizar_texto(c), texto_base) >= cfg.SIMILITUD_ANULACION)]
+            if cand.empty:
+                continue
+            # Si hay varios originales idénticos (el duplicado), se toma el más cercano en fecha.
+            io = (cand["fecha"] - fa["fecha"]).abs().idxmin()
+            self._marcar(df, [io, ia], "0 · Compensación interna")
+            n += 1
+        return n
 
     # ------------------------------------------------------------------
     # Nivel 1: por cuenta contable
@@ -226,6 +258,7 @@ class MotorConciliacion:
     def conciliar(self, banco: pd.DataFrame, mayor: pd.DataFrame, cuenta: str) -> ResultadoConciliacion:
         df = self._preparar(banco, mayor)
 
+        self.nivel_0_compensaciones(df)
         abiertas = self.nivel_1_cuentas(df)
         objetivo = abiertas + [cfg.SIN_CATEGORIA]
         for col in ("ingreso", "egreso"):
