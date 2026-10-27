@@ -130,6 +130,11 @@ scripts/                generador de datos sintéticos y controles SQL
 sql/                    consultas de control
 tests/                  pytest
 ```
+
+“Recreación con datos sintéticos”:
+
+Todos los nombres, CUIT, CBU, empresas e importes fueron generados aleatoriamente; cualquier coincidencia con personas o empresas reales es casual.
+
 [![Abrir en Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/ClaudioCGG/conciliacion-bancaria-ia/blob/main/notebooks/demo_conciliacion.ipynb)
 
 ## Stack
