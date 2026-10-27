@@ -130,6 +130,7 @@ scripts/                generador de datos sintéticos y controles SQL
 sql/                    consultas de control
 tests/                  pytest
 ```
+[![Abrir en Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/ClaudioCGG/conciliacion-bancaria-ia/blob/main/notebooks/demo_conciliacion.ipynb)
 
 ## Stack
 
